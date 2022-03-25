@@ -1,0 +1,8 @@
+---
+name: rule-foo-bar
+module: ltm
+partition: Common
+virtual_server: vs-testing-vip-443
+rules:
+  - /Common/portal_redirect
+  - /Common/rule-foo-bar
