@@ -1,0 +1,57 @@
+---
+- hosts: all
+  gather_facts: false
+  connection: smart
+  
+  vars_prompt:
+    - name: ansible_user
+      prompt: Username
+      private: no
+    - name: ansible_password
+      prompt: Password
+      private: yes
+
+  vars:
+    provider:
+      user: "{{ ansible_user }}"
+      password: "{{ ansible_password }}"
+      server: "{{ inventory_hostname }}"
+      validate_certs: no
+      server_port: 443
+    
+  tasks: # Using Ansible v2.9
+    - block: # Provides assertion that second block will only run on the Active unit.
+      - name: Show Active Status
+        raw: show /cm failover-status
+        register: failover
+
+      - name: Active Status Assertion
+        assert:
+          that: "'ACTIVE' in failover.stdout_lines[5]"
+    
+    - block: # Create iRule
+      - name: Create iRule
+        bigip_irule : 
+          provider: "{{ provider }}"
+          module: "{{ module }}"
+          name: "{{ name }}"
+          partition: "{{ partition }}"
+          content: "{{ lookup('file', './tcl/main.tcl') }}"
+          state: present
+        delegate_to: localhost
+
+    - block: # Apply iRules to virtual servers
+      - name: Deploy to Virtual Server
+        bigip_virtual_server:
+          provider: "{{ provider }}"
+          name: "{{ virtual_server }}"
+          irules: "{{ rules }}"
+          partition: "{{ partition }}"
+        delegate_to: localhost
+      
+    - block: # Save system configuration and sync to group
+      - name: Save Configuration and Sync to Standby
+        raw: "{{ item }}"
+        loop:
+          - save /sys config
+          - run /cm config-sync to-group "{{ sync_group }}"
